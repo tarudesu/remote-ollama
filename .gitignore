@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# User Configuration
+.remote-ollama.env
+
+# Logs
+*.log
