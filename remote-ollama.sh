@@ -460,13 +460,33 @@ cmd_shutdown() {
     log_success "Full shutdown and cleanup complete! You are now back to zero state."
 }
 
+cmd_help() {
+    echo -e "${BLUE}remote-ollama${NC} - Manage remote GPU-powered Ollama instances"
+    echo ""
+    echo -e "Usage: remote-ollama [COMMAND]"
+    echo ""
+    echo "Commands:"
+    echo "  config      Interactive configuration setup (saves to ~/.remote-ollama.env)"
+    echo "  init        Sets up SSH keys, shortcuts, and installs Ollama on remote server"
+    echo "  start       Starts remote Ollama and establishes local port forwarding"
+    echo "  status      Check the status of your local tunnel and remote GPU server"
+    echo "  test        Test inference through the tunnel (e.g., test \"Why is the sky blue?\")"
+    echo "  stop        Tears down the local tunnel and cleanly kills remote Ollama processes"
+    echo "  shutdown    Full teardown: stops services and revokes SSH keys"
+    echo "  help        Display this help message"
+    echo ""
+}
+
 # Print usage if no argument is provided
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 {config|init|start|stop|status|shutdown|test}"
+    cmd_help
     exit 1
 fi
 
 case "$1" in
+    help|--help|-h)
+        cmd_help
+        ;;
     config)
         cmd_config
         ;;
@@ -497,7 +517,7 @@ case "$1" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: $0 {config|init|start|stop|status|shutdown|test}"
+        cmd_help
         exit 1
         ;;
 esac
