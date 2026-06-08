@@ -494,6 +494,31 @@ cmd_shutdown() {
     log_success "Full shutdown and cleanup complete! You are now back to zero state."
 }
 
+cmd_pull() {
+    local model="$1"
+    if [ -z "$model" ]; then
+        log_error "Please specify a model to pull. (e.g., remote-ollama pull llama3.2)"
+        exit 1
+    fi
+    
+    log_info "Connecting to ${REMOTE_HOST} to pull model: ${model}..."
+    if ! check_ssh_connection; then
+        log_error "Unable to connect to '${REMOTE_HOST}'. Is the server online?"
+        exit 1
+    fi
+    
+    # Check if remote Ollama is running
+    if ! ssh "${REMOTE_HOST}" "pgrep -x ollama > /dev/null 2>&1"; then
+        log_warning "Ollama service doesn't appear to be running. Run 'remote-ollama start' first."
+        exit 1
+    fi
+
+    log_info "Pulling ${model} (this may take a while)..."
+    # Note: ssh automatically streams the stdout/stderr so you see the progress bar!
+    ssh -t "${REMOTE_HOST}" "ollama pull ${model}"
+    log_success "Finished pulling ${model}!"
+}
+
 cmd_help() {
     echo -e "${BLUE}remote-ollama${NC} - Manage remote GPU-powered Ollama instances"
     echo ""
@@ -505,6 +530,7 @@ cmd_help() {
     echo "  start       Starts remote Ollama and establishes local port forwarding"
     echo "  status      Check the status of your local tunnel and remote GPU server"
     echo "  test        Test inference through the tunnel (e.g., test \"Why is the sky blue?\")"
+    echo "  pull        Pull a new model to the remote GPU (e.g., pull llama3.2)"
     echo "  stop        Tears down the local tunnel and cleanly kills remote Ollama processes"
     echo "  shutdown    Full teardown: stops services and revokes SSH keys"
     echo "  help        Display this help message"
@@ -518,6 +544,11 @@ if [ $# -lt 1 ]; then
 fi
 
 case "$1" in
+    pull)
+        shift
+        ensure_config
+        cmd_pull "$@"
+        ;;
     help|--help|-h)
         cmd_help
         ;;
