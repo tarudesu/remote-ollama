@@ -22,6 +22,12 @@ Instead of wrestling with manual SSH port forwarding, systemd configurations, an
 - 📦 **Smart Model Management**: Automatically pulls your required models on startup if they are missing from the remote host.
 - 🔒 **Hardened Execution**: Uses `jq` to serialize JSON safely and pipes payloads directly into SSH, completely mitigating shell injection vulnerabilities.
 
+## 💡 Automatic Lifecycle Features
+
+To ensure a zero-friction experience:
+- **Automatic Installation**: When you run `remote-ollama init`, the script checks if `ollama` is installed on your remote GPU server. If it's missing, it automatically installs it for you.
+- **Automatic Model Retrieval**: When you run `remote-ollama connect`, the script checks if your configured models (e.g., `qwen3.5:0.8b`) are already downloaded on the server. If any are missing, it automatically triggers a remote download (`ollama pull`) before launching.
+
 ## 🛠️ Prerequisites
 
 - **Local Machine**: macOS or Linux (Requires: `bash`, `ssh`, `jq`, Python 3 for test parsing).
