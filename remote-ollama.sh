@@ -39,8 +39,10 @@ cmd_config() {
     read -p "Models to pull (comma separated) [default empty]: " input_models
     MODELS_STR="${input_models}"
 
-    # Save to config file
-    cat > "${CONFIG_FILE}" <<EOF
+    # Save to config file securely
+    (
+        umask 077
+        cat > "${CONFIG_FILE}" <<EOF
 REMOTE_HOST="${REMOTE_HOST}"
 REMOTE_IP="${REMOTE_IP}"
 REMOTE_PORT="${REMOTE_PORT}"
@@ -50,7 +52,7 @@ LOCAL_PORT="${LOCAL_PORT}"
 REMOTE_PORT_OLLAMA="${REMOTE_PORT_OLLAMA}"
 MODELS_STR="${MODELS_STR}"
 EOF
-    chmod 600 "${CONFIG_FILE}"
+    )
     echo -e "${GREEN}[SUCCESS]${NC} Configuration saved to ${CONFIG_FILE}"
 }
 
@@ -384,10 +386,9 @@ cmd_test() {
         log_warning "Local tunnel not responding. Checking if we can test directly on the remote server via SSH..."
         if check_ssh_connection; then
             log_info "Testing via remote SSH execution..."
-            local escaped_prompt
-            escaped_prompt=$(echo "${prompt}" | sed 's/"/\\"/g')
             local remote_json
-            remote_json=$(ssh "${REMOTE_HOST}" "curl -s -X POST http://127.0.0.1:${REMOTE_PORT_OLLAMA}/api/generate -d '{\"model\": \"${model}\", \"prompt\": \"${escaped_prompt}\", \"stream\": false}'")
+            remote_json=$(jq -n --arg model "$model" --arg prompt "$prompt" '{"model": $model, "prompt": $prompt, "stream": false}' | \
+                ssh "${REMOTE_HOST}" "curl -s -X POST http://127.0.0.1:${REMOTE_PORT_OLLAMA}/api/generate -H 'Content-Type: application/json' -d @-")
             if [ -n "$remote_json" ]; then
                 log_success "Response from remote server:"
                 echo "$remote_json" | python3 -c "import sys, json; print(json.load(sys.stdin).get('response', ''))" 2>/dev/null || echo "$remote_json"
@@ -402,12 +403,11 @@ cmd_test() {
 
     # 2. Local tunnel is active, test through it
     log_info "Sending query via local tunnel..."
-    local escaped_prompt
-    escaped_prompt=$(echo "${prompt}" | sed 's/"/\\"/g')
     local local_json
-    local_json=$(curl -s -X POST "${url}/api/generate" \
+    local_json=$(jq -n --arg model "$model" --arg prompt "$prompt" '{"model": $model, "prompt": $prompt, "stream": false}' | \
+        curl -s -X POST "${url}/api/generate" \
         -H "Content-Type: application/json" \
-        -d "{\"model\": \"${model}\", \"prompt\": \"${escaped_prompt}\", \"stream\": false}")
+        -d @-)
 
     if [ -n "$local_json" ]; then
         log_success "Response received:"
