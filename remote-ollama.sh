@@ -15,6 +15,18 @@ load_config() {
 cmd_config() {
     echo -e "${BLUE}[INFO]${NC} Interactive Configuration Setup"
     
+    read -p "Environment Type (standard/colab) [default standard]: " input_env
+    ENV_TYPE="${input_env:-standard}"
+    
+    if [ "$ENV_TYPE" = "colab" ] || [ "$ENV_TYPE" = "kaggle" ]; then
+        echo -e "\n${YELLOW}=== COLAB / KAGGLE SETUP INSTRUCTIONS ===${NC}"
+        echo "Before continuing, run the following code in a notebook cell to enable SSH:"
+        echo -e "${GREEN}!pip install colab_ssh --upgrade${NC}"
+        echo -e "${GREEN}from colab_ssh import launch_ssh_cloudflared${NC}"
+        echo -e "${GREEN}launch_ssh_cloudflared(password=\"remoteollama\")${NC}"
+        echo -e "Wait for it to print the Cloudflare Host URL and Port, then use them below.\n"
+    fi
+    
     read -p "SSH Host Alias [e.g., gpu-server]: " input_host
     REMOTE_HOST="${input_host:-gpu-server}"
     
@@ -43,6 +55,7 @@ cmd_config() {
     (
         umask 077
         cat > "${CONFIG_FILE}" <<EOF
+ENV_TYPE="${ENV_TYPE}"
 REMOTE_HOST="${REMOTE_HOST}"
 REMOTE_IP="${REMOTE_IP}"
 REMOTE_PORT="${REMOTE_PORT}"
@@ -491,6 +504,18 @@ case "$1" in
         cmd_config
         ;;
     init)
+        if [ "$2" = "colab" ] || [ "$2" = "kaggle" ]; then
+            echo -e "\n${YELLOW}=== COLAB / KAGGLE SETUP INSTRUCTIONS ===${NC}"
+            echo "Colab/Kaggle environments do not have SSH by default."
+            echo "Run the following code in a notebook cell to expose an SSH tunnel:"
+            echo -e ""
+            echo -e "${GREEN}!pip install colab_ssh --upgrade${NC}"
+            echo -e "${GREEN}from colab_ssh import launch_ssh_cloudflared${NC}"
+            echo -e "${GREEN}launch_ssh_cloudflared(password=\"remoteollama\")${NC}"
+            echo -e ""
+            echo -e "Once you have the Host URL and Port, run ${BLUE}remote-ollama config${NC} to configure them!\n"
+            exit 0
+        fi
         ensure_config
         cmd_init
         ;;
