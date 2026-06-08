@@ -13,10 +13,16 @@ load_config() {
 }
 
 cmd_config() {
+    local env_arg="$1"
     echo -e "${BLUE}[INFO]${NC} Interactive Configuration Setup"
     
-    read -p "Environment Type (standard/colab) [default standard]: " input_env
-    ENV_TYPE="${input_env:-standard}"
+    if [ -n "$env_arg" ]; then
+        ENV_TYPE="$env_arg"
+        echo -e "Environment Type: ${ENV_TYPE}"
+    else
+        read -p "Environment Type (standard/colab) [default standard]: " input_env
+        ENV_TYPE="${input_env:-standard}"
+    fi
     
     if [ "$ENV_TYPE" = "colab" ] || [ "$ENV_TYPE" = "kaggle" ]; then
         echo -e "\n${YELLOW}=== COLAB / KAGGLE SETUP INSTRUCTIONS ===${NC}"
@@ -501,7 +507,7 @@ case "$1" in
         cmd_help
         ;;
     config)
-        cmd_config
+        cmd_config "$2"
         ;;
     init)
         if [ "$2" = "colab" ] || [ "$2" = "kaggle" ]; then
