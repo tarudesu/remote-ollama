@@ -35,6 +35,17 @@ To ensure a zero-friction experience:
 
 ## 🚀 Installation
 
+### Option 1: Install via Homebrew (macOS & Linux)
+
+You can install `remote-ollama` directly using Homebrew:
+
+```bash
+brew tap yourusername/remote-ollama
+brew install remote-ollama
+```
+
+### Option 2: Manual Installation (Clone & Alias)
+
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/yourusername/remote-ollama.git
@@ -42,7 +53,7 @@ To ensure a zero-friction experience:
    chmod +x remote-ollama.sh
    ```
 
-2. **Set up a global alias (Highly Recommended):**
+2. **Set up a global alias:**
    Add the following line to your `~/.zshrc` or `~/.bashrc`:
    ```bash
    alias remote-ollama="/path/to/your/remote-ollama/remote-ollama.sh"
