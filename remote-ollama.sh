@@ -12,7 +12,7 @@ load_config() {
     fi
 }
 
-cmd_config() {
+cmd_setup() {
     echo -e "${BLUE}[INFO]${NC} Interactive Configuration Setup"
     
     read -p "SSH Host Alias [default ${REMOTE_HOST:-gpu-server}]: " input_host
@@ -59,7 +59,7 @@ EOF
 ensure_config() {
     if [ ! -f "${CONFIG_FILE}" ]; then
         echo -e "${YELLOW}[WARNING]${NC} No configuration found. Let's set it up."
-        cmd_config
+        cmd_setup
     fi
     load_config
     
@@ -216,7 +216,7 @@ EOF
     log_success "Initialization process completed successfully!"
 }
 
-cmd_start() {
+cmd_connect() {
     log_info "Checking connection and starting Ollama..."
 
     # Check SSH Connection
@@ -301,7 +301,7 @@ cmd_start() {
     log_success "Ollama and tunnel are ready for use!"
 }
 
-cmd_stop() {
+cmd_disconnect() {
     log_info "Stopping Ollama and local tunnel..."
 
     # 1. Stop local tunnel
@@ -420,7 +420,7 @@ cmd_test() {
                 log_error "Failed to get response from remote Ollama API."
             fi
         else
-            log_error "Cannot connect to server or local tunnel. Please run 'auto-ollama start' first."
+            log_error "Cannot connect to server or local tunnel. Please run 'remote-ollama connect' first."
         fi
         return
     fi
@@ -441,11 +441,11 @@ cmd_test() {
     fi
 }
 
-cmd_shutdown() {
-    log_info "Starting full shutdown and revocation..."
+cmd_reset() {
+    log_info "Starting full reset and revocation..."
 
     # 1. Stop local tunnel and remote Ollama
-    cmd_stop
+    cmd_disconnect
 
     # 2. Revoke SSH key from remote server
     if [ -f "${SSH_KEY_PATH}.pub" ] && check_ssh_connection; then
@@ -501,7 +501,7 @@ with open(path, 'w') as f: f.writelines(new_lines)
         log_success "Local SSH key files deleted."
     fi
 
-    log_success "Full shutdown and cleanup complete! You are now back to zero state."
+    log_success "Full reset and cleanup complete! You are now back to zero state."
 }
 
 cmd_pull() {
@@ -519,7 +519,7 @@ cmd_pull() {
     
     # Check if remote Ollama is running
     if ! ssh "${REMOTE_HOST}" "pgrep -x ollama > /dev/null 2>&1"; then
-        log_warning "Ollama service doesn't appear to be running. Run 'remote-ollama start' first."
+        log_warning "Ollama service doesn't appear to be running. Run 'remote-ollama connect' first."
         exit 1
     fi
 
@@ -535,14 +535,14 @@ cmd_help() {
     echo -e "Usage: remote-ollama [COMMAND]"
     echo ""
     echo "Commands:"
-    echo "  config      Interactive configuration setup (saves to ~/.remote-ollama.env)"
-    echo "  init        Sets up SSH keys, shortcuts, and installs Ollama on remote server"
-    echo "  start       Starts remote Ollama and establishes local port forwarding"
-    echo "  status      Check the status of your local tunnel and remote GPU server"
-    echo "  test        Test inference through the tunnel (e.g., test \"Why is the sky blue?\")"
-    echo "  pull        Pull a new model to the remote GPU (e.g., pull llama3.2)"
-    echo "  stop        Tears down the local tunnel and cleanly kills remote Ollama processes"
-    echo "  shutdown    Full teardown: stops services and revokes SSH keys"
+    echo "  setup       Configure server connection settings"
+    echo "  init        Initialize SSH keys and install Ollama on remote server"
+    echo "  connect     Start remote Ollama and open local SSH tunnel"
+    echo "  status      Show status of local tunnel, remote Ollama, and GPU usage"
+    echo "  test        Send a test prompt to remote Ollama (e.g., test 'hi')"
+    echo "  pull        Download a model onto the remote server (e.g., pull qwen3.5:0.8b)"
+    echo "  disconnect  Stop local tunnel and remote Ollama service"
+    echo "  reset       Full teardown: stop services, revoke SSH keys, and delete config"
     echo "  help        Display this help message"
     echo ""
 }
@@ -562,29 +562,29 @@ case "$1" in
     help|--help|-h)
         cmd_help
         ;;
-    config)
+    setup)
         load_config
-        cmd_config
+        cmd_setup
         ;;
     init)
         ensure_config
         cmd_init
         ;;
-    start)
+    connect)
         ensure_config
-        cmd_start
+        cmd_connect
         ;;
-    stop)
+    disconnect)
         ensure_config
-        cmd_stop
+        cmd_disconnect
         ;;
     status)
         ensure_config
         cmd_status
         ;;
-    shutdown)
+    reset)
         ensure_config
-        cmd_shutdown
+        cmd_reset
         ;;
     test)
         shift

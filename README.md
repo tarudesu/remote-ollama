@@ -50,48 +50,54 @@ Instead of wrestling with manual SSH port forwarding, systemd configurations, an
 
 The tool uses a simple sub-command structure. 
 
-### 1. ⚙️ Configuration (`config`)
-Run the configuration setup. It interactively asks for your server details:
+### 1. ⚙️ Configuration Setup (`setup`)
+Configure your server details. It interactively asks for Host Alias, Server IP Address, SSH Port, Username, SSH Key Path, Local Tunnel Port, and remote Ollama Port:
 ```bash
-remote-ollama config
+remote-ollama setup
 ```
 *Note: This saves your configuration to `~/.remote-ollama.env` with strict `0600` permissions, keeping your IP and usernames safe.*
 
 ### 2. 🏗️ Initialization (`init`)
-Sets up SSH keys, modifies your local `~/.ssh/config`, pushes the public key to the server, and installs Ollama remotely if not already present:
+Sets up SSH keys, modifies your local `~/.ssh/config` file, copy the public key to the remote server, and installs Ollama on the remote host if not already present:
 ```bash
 remote-ollama init
 ```
 
-### 3. ▶️ Start Service (`start`)
-Starts the remote Ollama service, establishes the SSH port-forwarding tunnel, and pulls any missing models:
+### 3. 🔌 Connect Service (`connect`)
+Starts the remote Ollama service, establishes the local port-forwarding SSH tunnel (`localhost:11434` -> `remote:11434`), and pulls any missing models defined in your config:
 ```bash
-remote-ollama start
+remote-ollama connect
 ```
-*Once running, point your local clients to `http://localhost:11434`.*
+*Once connected, point your local clients to `http://localhost:11434`.*
 
 ### 4. 📊 Check Status (`status`)
-Check the status of the local tunnel, remote service, installed models, and real-time GPU utilization (`nvidia-smi`):
+Check the status of the local port-forwarding tunnel, remote Ollama service, installed models, and real-time GPU utilization (`nvidia-smi`):
 ```bash
 remote-ollama status
 ```
 
 ### 5. 🧪 Test Connection (`test`)
-Send a quick test query to ensure inference is working properly through the tunnel:
+Send a quick test query to ensure inference is working properly through the local tunnel:
 ```bash
 remote-ollama test "Explain quantum computing in one sentence."
 ```
 
-### 6. 🛑 Stop Service (`stop`)
-Tears down the local SSH tunnel and cleanly kills remote Ollama processes to release your GPU VRAM:
+### 6. 📦 Pull Model (`pull`)
+Download a new model onto the remote server:
 ```bash
-remote-ollama stop
+remote-ollama pull qwen3.5:0.8b
 ```
 
-### 7. 💥 Full Teardown (`shutdown`)
-A complete "back to zero" command. Stops all services, revokes the SSH key from the remote server's `authorized_keys`, and deletes the local keys:
+### 7. 🔌 Disconnect Service (`disconnect`)
+Tears down the local SSH tunnel and cleanly kills remote Ollama and runner processes to release GPU VRAM:
 ```bash
-remote-ollama shutdown
+remote-ollama disconnect
+```
+
+### 8. 💥 Full Reset (`reset`)
+A complete "back to zero" command. Revokes the SSH key from the remote server's `authorized_keys`, removes the host alias configuration from your `~/.ssh/config`, and deletes local SSH keys:
+```bash
+remote-ollama reset
 ```
 
 ---
