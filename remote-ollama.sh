@@ -13,55 +13,36 @@ load_config() {
 }
 
 cmd_config() {
-    local env_arg="$1"
     echo -e "${BLUE}[INFO]${NC} Interactive Configuration Setup"
     
-    if [ -n "$env_arg" ]; then
-        ENV_TYPE="$env_arg"
-        echo -e "Environment Type: ${ENV_TYPE}"
-    else
-        read -p "Environment Type (standard/colab) [default standard]: " input_env
-        ENV_TYPE="${input_env:-standard}"
-    fi
+    read -p "SSH Host Alias [default ${REMOTE_HOST:-gpu-server}]: " input_host
+    REMOTE_HOST="${input_host:-${REMOTE_HOST:-gpu-server}}"
     
-    if [ "$ENV_TYPE" = "colab" ] || [ "$ENV_TYPE" = "kaggle" ]; then
-        echo -e "\n${YELLOW}=== COLAB / KAGGLE SETUP INSTRUCTIONS ===${NC}"
-        echo "Before continuing, run the following code in a notebook cell to enable SSH:"
-        echo -e "${GREEN}!pip install colab_ssh --upgrade${NC}"
-        echo -e "${GREEN}from colab_ssh import launch_ssh_cloudflared${NC}"
-        echo -e "${GREEN}launch_ssh_cloudflared(password=\"remoteollama\")${NC}"
-        echo -e "Wait for it to print the Cloudflare Host URL and Port, then use them below.\n"
-    fi
+    read -p "Server IP Address [default ${REMOTE_IP}]: " input_ip
+    REMOTE_IP="${input_ip:-${REMOTE_IP}}"
     
-    read -p "SSH Host Alias [e.g., gpu-server]: " input_host
-    REMOTE_HOST="${input_host:-gpu-server}"
+    read -p "SSH Port [default ${REMOTE_PORT:-22}]: " input_port
+    REMOTE_PORT="${input_port:-${REMOTE_PORT:-22}}"
     
-    read -p "Server IP Address: " input_ip
-    REMOTE_IP="${input_ip}"
+    read -p "SSH Username [default ${REMOTE_USER:-root}]: " input_user
+    REMOTE_USER="${input_user:-${REMOTE_USER:-root}}"
     
-    read -p "SSH Port [default 22]: " input_port
-    REMOTE_PORT="${input_port:-22}"
+    read -p "SSH Key Path [default ${SSH_KEY_PATH:-${HOME}/.ssh/${REMOTE_HOST}}]: " input_key
+    SSH_KEY_PATH="${input_key:-${SSH_KEY_PATH:-${HOME}/.ssh/${REMOTE_HOST}}}"
     
-    read -p "SSH Username [default root]: " input_user
-    REMOTE_USER="${input_user:-root}"
+    read -p "Local Tunnel Port [default ${LOCAL_PORT:-11434}]: " input_local_port
+    LOCAL_PORT="${input_local_port:-${LOCAL_PORT:-11434}}"
     
-    read -p "SSH Key Path [default ${HOME}/.ssh/${REMOTE_HOST}]: " input_key
-    SSH_KEY_PATH="${input_key:-${HOME}/.ssh/${REMOTE_HOST}}"
+    read -p "Remote Ollama Port [default ${REMOTE_PORT_OLLAMA:-11434}]: " input_remote_port
+    REMOTE_PORT_OLLAMA="${input_remote_port:-${REMOTE_PORT_OLLAMA:-11434}}"
     
-    read -p "Local Tunnel Port [default 11434]: " input_local_port
-    LOCAL_PORT="${input_local_port:-11434}"
-    
-    read -p "Remote Ollama Port [default 11434]: " input_remote_port
-    REMOTE_PORT_OLLAMA="${input_remote_port:-11434}"
-    
-    read -p "Models to pull (comma separated) [default empty]: " input_models
-    MODELS_STR="${input_models}"
+    read -p "Models to pull (comma separated) [default ${MODELS_STR:-qwen3.5:0.8b}]: " input_models
+    MODELS_STR="${input_models:-${MODELS_STR:-qwen3.5:0.8b}}"
 
     # Save to config file securely
     (
         umask 077
         cat > "${CONFIG_FILE}" <<EOF
-ENV_TYPE="${ENV_TYPE}"
 REMOTE_HOST="${REMOTE_HOST}"
 REMOTE_IP="${REMOTE_IP}"
 REMOTE_PORT="${REMOTE_PORT}"
@@ -123,7 +104,7 @@ cmd_init() {
         log_info "SSH key not found at ${SSH_KEY_PATH}. Generating one..."
         mkdir -p "$(dirname "${SSH_KEY_PATH}")"
         chmod 700 "$(dirname "${SSH_KEY_PATH}")"
-        ssh-keygen -t ed25519 -f "${SSH_KEY_PATH}" -C "greennode" -N ""
+        ssh-keygen -t ed25519 -f "${SSH_KEY_PATH}" -C "remote-ollama-${REMOTE_HOST}" -N ""
         log_success "SSH key generated."
     else
         log_info "SSH key already exists at ${SSH_KEY_PATH}."
@@ -135,36 +116,45 @@ cmd_init() {
     touch "${ssh_config}"
     chmod 600 "${ssh_config}"
 
-    if ! grep -q "Host ${REMOTE_HOST}" "${ssh_config}"; then
-        log_info "Adding Host configuration for '${REMOTE_HOST}' in ${ssh_config}..."
-        
-        local proxy_command=""
-        if [[ "${REMOTE_IP}" == *".trycloudflare.com"* ]]; then
-            local cf_path
-            cf_path=$(command -v cloudflared)
-            if [ -z "$cf_path" ]; then
-                log_error "cloudflared is not installed but is required for trycloudflare.com tunnels."
-                log_info "Please run: brew install cloudflared"
-                exit 1
-            fi
-            proxy_command="    ProxyCommand ${cf_path} access ssh --hostname %h"
-            log_info "Detected Cloudflare tunnel. Injecting ProxyCommand into SSH config."
-        fi
+    log_info "Updating Host configuration for '${REMOTE_HOST}' in ${ssh_config}..."
+    # Clean up existing host block first
+    python3 -c "
+import sys
+path, host = sys.argv[1], sys.argv[2]
+try:
+    with open(path, 'r') as f: lines = f.readlines()
+except Exception:
+    lines = []
+new_lines = []
+skip = False
+for line in lines:
+    stripped = line.strip()
+    if stripped.lower().startswith('host '):
+        hosts = [h.strip() for h in stripped.split()[1:]]
+        skip = host in hosts
+    elif line and not line.startswith(' ') and not line.startswith('\t') and stripped != '':
+        skip = False
+    if not skip:
+        new_lines.append(line)
+while new_lines and new_lines[-1].strip() == '':
+    new_lines.pop()
+with open(path, 'w') as f: f.writelines(new_lines)
+" "${ssh_config}" "${REMOTE_HOST}"
 
-        cat >> "${ssh_config}" <<EOF
+    # Append new configuration block (with an empty line prefix if the file is not empty)
+    if [ -s "${ssh_config}" ]; then
+        echo "" >> "${ssh_config}"
+    fi
 
+    cat >> "${ssh_config}" <<EOF
 Host ${REMOTE_HOST}
     HostName ${REMOTE_IP}
     User ${REMOTE_USER}
     Port ${REMOTE_PORT}
     IdentityFile ${SSH_KEY_PATH}
     IdentitiesOnly yes
-${proxy_command}
 EOF
-        log_success "SSH config added."
-    else
-        log_info "Host configuration for '${REMOTE_HOST}' already exists in ${ssh_config}."
-    fi
+    log_success "SSH config updated for '${REMOTE_HOST}'."
 
     # 3. Copy SSH Key to Server
     if check_ssh_connection; then
@@ -175,7 +165,7 @@ EOF
         has_pwd="${has_pwd:-n}"
         if [[ "$has_pwd" =~ ^[Yy]$ ]]; then
             log_info "Attempting to copy SSH key using password..."
-            if cat "${SSH_KEY_PATH}.pub" | ssh -o ConnectTimeout=10 -p "${REMOTE_PORT}" "${REMOTE_USER}@${REMOTE_IP}" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"; then
+            if cat "${SSH_KEY_PATH}.pub" | ssh -o ConnectTimeout=10 -o PreferredAuthentications=password -o PubkeyAuthentication=no "${REMOTE_HOST}" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"; then
                 log_success "Successfully copied public key to remote server."
             else
                 log_warning "Failed to copy key automatically. Falling back to manual method..."
@@ -191,7 +181,7 @@ EOF
             echo -e "${GREEN}${pub_key}${NC}"
             echo -e "${YELLOW}========================================================================${NC}"
             echo -e "To register this key, copy and paste the following command on your server terminal"
-            echo -e "(via your GreenNode Web Console terminal or your already-open IDE terminal):"
+            echo -e "(via your web console or already-open terminal):"
             echo -e ""
             echo -e "${BLUE}mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo \"${pub_key}\" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys${NC}"
             echo -e ""
@@ -403,8 +393,8 @@ cmd_test() {
         prompt="Why is the sky blue?"
     fi
     
-    # Use first model in MODELS array, default to llama3.2 if empty
-    local model="llama3.2"
+    # Use first model in MODELS array, default to qwen3.5:0.8b if empty
+    local model="qwen3.5:0.8b"
     if [ ${#MODELS[@]} -gt 0 ] && [ -n "${MODELS[0]}" ]; then
         model=$(echo "${MODELS[0]}" | xargs)
     fi
@@ -476,8 +466,28 @@ cmd_shutdown() {
     local ssh_config="${HOME}/.ssh/config"
     if [ -f "${ssh_config}" ]; then
         log_info "Removing SSH Host configuration from Mac config..."
-        # macOS compatible sed to delete the block from Host greennode down to IdentitiesOnly yes
-        if sed -i '' '/Host '"${REMOTE_HOST}"'/,/IdentitiesOnly yes/d' "${ssh_config}"; then
+        if python3 -c "
+import sys
+path, host = sys.argv[1], sys.argv[2]
+try:
+    with open(path, 'r') as f: lines = f.readlines()
+except Exception:
+    lines = []
+new_lines = []
+skip = False
+for line in lines:
+    stripped = line.strip()
+    if stripped.lower().startswith('host '):
+        hosts = [h.strip() for h in stripped.split()[1:]]
+        skip = host in hosts
+    elif line and not line.startswith(' ') and not line.startswith('\t') and stripped != '':
+        skip = False
+    if not skip:
+        new_lines.append(line)
+while new_lines and new_lines[-1].strip() == '':
+    new_lines.pop()
+with open(path, 'w') as f: f.writelines(new_lines)
+" "${ssh_config}" "${REMOTE_HOST}"; then
             log_success "SSH configuration block removed from ${ssh_config}."
         else
             log_warning "Failed to remove SSH config block from ${ssh_config}."
@@ -553,21 +563,10 @@ case "$1" in
         cmd_help
         ;;
     config)
-        cmd_config "$2"
+        load_config
+        cmd_config
         ;;
     init)
-        if [ "$2" = "colab" ] || [ "$2" = "kaggle" ]; then
-            echo -e "\n${YELLOW}=== COLAB / KAGGLE SETUP INSTRUCTIONS ===${NC}"
-            echo "Colab/Kaggle environments do not have SSH by default."
-            echo "Run the following code in a notebook cell to expose an SSH tunnel:"
-            echo -e ""
-            echo -e "${GREEN}!pip install colab_ssh --upgrade${NC}"
-            echo -e "${GREEN}from colab_ssh import launch_ssh_cloudflared${NC}"
-            echo -e "${GREEN}launch_ssh_cloudflared(password=\"remoteollama\")${NC}"
-            echo -e ""
-            echo -e "Once you have the Host URL and Port, run ${BLUE}remote-ollama config${NC} to configure them!\n"
-            exit 0
-        fi
         ensure_config
         cmd_init
         ;;
