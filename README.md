@@ -9,7 +9,7 @@
 
 ---
 
-**Remote Ollama Manager** is a lightweight, zero-dependency bash utility designed by **tarudesu** to solve the headaches of running large language models on remote GPU servers.
+**Remote Ollama Manager** is a lightweight, zero-dependency bash utility designed to solve the headaches of running large language models on remote GPU servers.
 
 Instead of wrestling with manual SSH port forwarding, systemd configurations, and GPU memory leaks caused by zombie `llama-server` processes, this tool provides a unified, highly secure command-line interface to orchestrate everything locally.
 
@@ -31,7 +31,7 @@ Instead of wrestling with manual SSH port forwarding, systemd configurations, an
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/tarudesu/remote-ollama.git
+   git clone https://github.com/yourusername/remote-ollama.git
    cd remote-ollama
    chmod +x remote-ollama.sh
    ```
@@ -110,5 +110,5 @@ This project is licensed under the MIT License.
 
 ---
 <div align="center">
-  <i>Developed with ❤️ by <a href="https://github.com/tarudesu">tarudesu</a></i>
+  <i>Developed with ❤️ for the open-source community.</i>
 </div>
