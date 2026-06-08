@@ -137,6 +137,20 @@ cmd_init() {
 
     if ! grep -q "Host ${REMOTE_HOST}" "${ssh_config}"; then
         log_info "Adding Host configuration for '${REMOTE_HOST}' in ${ssh_config}..."
+        
+        local proxy_command=""
+        if [[ "${REMOTE_IP}" == *".trycloudflare.com"* ]]; then
+            local cf_path
+            cf_path=$(command -v cloudflared)
+            if [ -z "$cf_path" ]; then
+                log_error "cloudflared is not installed but is required for trycloudflare.com tunnels."
+                log_info "Please run: brew install cloudflared"
+                exit 1
+            fi
+            proxy_command="    ProxyCommand ${cf_path} access ssh --hostname %h"
+            log_info "Detected Cloudflare tunnel. Injecting ProxyCommand into SSH config."
+        fi
+
         cat >> "${ssh_config}" <<EOF
 
 Host ${REMOTE_HOST}
@@ -145,6 +159,7 @@ Host ${REMOTE_HOST}
     Port ${REMOTE_PORT}
     IdentityFile ${SSH_KEY_PATH}
     IdentitiesOnly yes
+${proxy_command}
 EOF
         log_success "SSH config added."
     else
