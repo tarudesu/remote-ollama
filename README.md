@@ -87,31 +87,38 @@ remote-ollama connect
 ```
 *Once connected, point your local clients to `http://localhost:11434`.*
 
-### 4. 📊 Check Status (`status`)
+### 4. 💬 Interactive Chat (`chat`)
+Start a native, interactive chat session directly in your terminal. It lists all available models on the remote server, lets you select one, and launches the interactive Ollama chat session:
+```bash
+remote-ollama chat
+```
+*Note: If only one model is available, the script will select it automatically.*
+
+### 5. 📊 Check Status (`status`)
 Check the status of the local port-forwarding tunnel, remote Ollama service, installed models, and real-time GPU utilization (`nvidia-smi`):
 ```bash
 remote-ollama status
 ```
 
-### 5. 🧪 Test Connection (`test`)
+### 6. 🧪 Test Connection (`test`)
 Send a quick test query to ensure inference is working properly through the local tunnel:
 ```bash
 remote-ollama test "Explain quantum computing in one sentence."
 ```
 
-### 6. 📦 Pull Model (`pull`)
+### 7. 📦 Pull Model (`pull`)
 Download a new model onto the remote server:
 ```bash
 remote-ollama pull qwen3.5:0.8b
 ```
 
-### 7. 🔌 Disconnect Service (`disconnect`)
+### 8. 🔌 Disconnect Service (`disconnect`)
 Tears down the local SSH tunnel and cleanly kills remote Ollama and runner processes to release GPU VRAM:
 ```bash
 remote-ollama disconnect
 ```
 
-### 8. 💥 Full Reset (`reset`)
+### 9. 💥 Full Reset (`reset`)
 A complete "back to zero" command. Revokes the SSH key from the remote server's `authorized_keys`, removes the host alias configuration from your `~/.ssh/config`, and deletes local SSH keys:
 ```bash
 remote-ollama reset

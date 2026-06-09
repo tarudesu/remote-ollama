@@ -529,6 +529,61 @@ cmd_pull() {
     log_success "Finished pulling ${model}!"
 }
 
+cmd_chat() {
+    log_info "Connecting to ${REMOTE_HOST} to fetch available models..."
+    if ! check_ssh_connection; then
+        log_error "Unable to connect to '${REMOTE_HOST}'. Make sure init was run and the server is online."
+        exit 1
+    fi
+
+    # Fetch models from the remote server
+    local models_raw
+    models_raw=$(ssh "${REMOTE_HOST}" "ollama list" 2>/dev/null)
+    
+    # Extract model names (skip header line, print first column)
+    local available_models=()
+    while read -r line; do
+        if [ -n "$line" ]; then
+            available_models+=("$line")
+        fi
+    done < <(echo "$models_raw" | awk 'NR>1 {print $1}')
+
+    if [ ${#available_models[@]} -eq 0 ]; then
+        log_error "No models found on the remote server."
+        log_info "You can download a model first using: remote-ollama pull <model-name>"
+        exit 1
+    fi
+
+    local selected_model=""
+    if [ ${#available_models[@]} -eq 1 ]; then
+        selected_model="${available_models[0]}"
+        log_info "Automatically selected the only available model: ${selected_model}"
+    else
+        echo -e "\n${BLUE}[INFO]${NC} Available remote models:"
+        for i in "${!available_models[@]}"; do
+            echo -e "  $((i+1))) ${available_models[i]}"
+        done
+        echo ""
+        
+        while true; do
+            read -p "Select a model to chat with (1-${#available_models[@]}): " choice || exit 1
+            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#available_models[@]}" ]; then
+                selected_model="${available_models[$((choice-1))]}"
+                break
+            else
+                log_warning "Invalid selection. Please enter a number between 1 and ${#available_models[@]}."
+            fi
+        done
+    fi
+
+    log_success "Starting interactive chat session with '${selected_model}'..."
+    log_info "Press Ctrl+D or type '/bye' to exit the chat."
+    echo ""
+    
+    # Run the interactive chat directly on the remote server
+    ssh -t "${REMOTE_HOST}" "ollama run ${selected_model}"
+}
+
 cmd_help() {
     echo -e "${BLUE}remote-ollama${NC} - Manage remote GPU-powered Ollama instances"
     echo ""
@@ -538,6 +593,7 @@ cmd_help() {
     echo "  setup       Configure server connection settings"
     echo "  init        Initialize SSH keys and install Ollama on remote server"
     echo "  connect     Start remote Ollama and open local SSH tunnel"
+    echo "  chat        Start an interactive chat session with a remote model"
     echo "  status      Show status of local tunnel, remote Ollama, and GPU usage"
     echo "  test        Send a test prompt to remote Ollama (e.g., test 'hi')"
     echo "  pull        Download a model onto the remote server (e.g., pull qwen3.5:0.8b)"
@@ -573,6 +629,10 @@ case "$1" in
     connect)
         ensure_config
         cmd_connect
+        ;;
+    chat)
+        ensure_config
+        cmd_chat
         ;;
     disconnect)
         ensure_config
