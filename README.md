@@ -71,7 +71,7 @@ brew install remote-ollama
 > All commands optionally accept a profile name as the second argument (e.g. `remote-ollama connect my-server`). If no profile is provided, it defaults to `default` or automatically creates one.
 
 ### 1. ⚙️ Configuration Setup (`setup`)
-Configure your server details. It interactively asks for Host Alias, Server IP Address, SSH Port, Username, SSH Key Path, Local Tunnel Port, and remote Ollama Port:
+Configure your server details. It interactively asks for Host Alias, Server IP Address, SSH Port, Username, SSH Key Path, Local Tunnel Port, Remote Ollama Port, and Default Working Directory:
 ```bash
 remote-ollama setup
 ```
@@ -103,9 +103,9 @@ remote-ollama connect
 *Once connected, point your local clients to `http://localhost:11434`.*
 
 ### 6. 💻 SSH Connect (`ssh-connect`)
-Start SSH setup and open an interactive SSH shell directly to the server:
+Establish an interactive SSH shell directly to the server. If no profile exists (or if you don't provide an argument), it will automatically launch a streamlined **SSH-only setup wizard** (skipping Ollama configuration) and then securely connect you. It will also automatically `cd` into your configured Default Working Directory upon login:
 ```bash
-remote-ollama ssh-connect
+remote-ollama ssh-connect [profile]
 ```
 
 ### 7. 🚫 SSH Disconnect (`ssh-disconnect`)
