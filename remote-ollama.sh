@@ -4,7 +4,17 @@
 # (We don't set -e globally to handle specific command failures gracefully, but we'll use robust conditionals)
 
 # Configuration Variables
-CONFIG_FILE="${HOME}/.remote-ollama.env"
+CONFIG_DIR="${HOME}/.remote-ollama"
+PROFILES_DIR="${CONFIG_DIR}/profiles"
+PROFILE="${2:-default}"
+CONFIG_FILE="${PROFILES_DIR}/${PROFILE}.env"
+
+mkdir -p "${PROFILES_DIR}"
+
+# Migrate old config if it exists
+if [ -f "${HOME}/.remote-ollama.env" ]; then
+    mv "${HOME}/.remote-ollama.env" "${PROFILES_DIR}/default.env"
+fi
 
 load_config() {
     if [ -f "${CONFIG_FILE}" ]; then
@@ -13,11 +23,22 @@ load_config() {
 }
 
 cmd_setup() {
+    local setup_mode="$1"
     echo -e "${BLUE}[INFO]${NC} Interactive Configuration Setup"
     
-    read -p "SSH Host Alias [default ${REMOTE_HOST:-gpu-server}]: " input_host
-    REMOTE_HOST="${input_host:-${REMOTE_HOST:-gpu-server}}"
+    # If a profile was explicitly provided as $2, use it as default for Host Alias
+    local default_host="${REMOTE_HOST:-gpu-server}"
+    if [ "$PROFILE" != "default" ]; then
+        default_host="${PROFILE}"
+    fi
+
+    read -p "SSH Host Alias [default ${default_host}]: " input_host
+    REMOTE_HOST="${input_host:-${default_host}}"
     
+    # Update PROFILE and CONFIG_FILE based on the Host Alias
+    PROFILE="${REMOTE_HOST}"
+    CONFIG_FILE="${PROFILES_DIR}/${PROFILE}.env"
+
     read -p "Server IP Address [default ${REMOTE_IP}]: " input_ip
     REMOTE_IP="${input_ip:-${REMOTE_IP}}"
     
@@ -30,14 +51,24 @@ cmd_setup() {
     read -p "SSH Key Path [default ${SSH_KEY_PATH:-${HOME}/.ssh/${REMOTE_HOST}}]: " input_key
     SSH_KEY_PATH="${input_key:-${SSH_KEY_PATH:-${HOME}/.ssh/${REMOTE_HOST}}}"
     
-    read -p "Local Tunnel Port [default ${LOCAL_PORT:-11434}]: " input_local_port
-    LOCAL_PORT="${input_local_port:-${LOCAL_PORT:-11434}}"
-    
-    read -p "Remote Ollama Port [default ${REMOTE_PORT_OLLAMA:-11434}]: " input_remote_port
-    REMOTE_PORT_OLLAMA="${input_remote_port:-${REMOTE_PORT_OLLAMA:-11434}}"
-    
-    read -p "Models to pull (comma separated) [default ${MODELS_STR:-qwen3.5:0.8b}]: " input_models
-    MODELS_STR="${input_models:-${MODELS_STR:-qwen3.5:0.8b}}"
+    read -p "Default Working Directory [default ${DEFAULT_DIR:-~}]: " input_dir
+    DEFAULT_DIR="${input_dir:-${DEFAULT_DIR:-~}}"
+
+    if [ "$setup_mode" != "ssh-only" ]; then
+        read -p "Local Tunnel Port [default ${LOCAL_PORT:-11434}]: " input_local_port
+        LOCAL_PORT="${input_local_port:-${LOCAL_PORT:-11434}}"
+        
+        read -p "Remote Ollama Port [default ${REMOTE_PORT_OLLAMA:-11434}]: " input_remote_port
+        REMOTE_PORT_OLLAMA="${input_remote_port:-${REMOTE_PORT_OLLAMA:-11434}}"
+        
+        read -p "Models to pull (comma separated) [default ${MODELS_STR:-qwen3.5:0.8b}]: " input_models
+        MODELS_STR="${input_models:-${MODELS_STR:-qwen3.5:0.8b}}"
+    else
+        # Provide defaults silently so config file is valid if they later use 'connect'
+        LOCAL_PORT="${LOCAL_PORT:-11434}"
+        REMOTE_PORT_OLLAMA="${REMOTE_PORT_OLLAMA:-11434}"
+        MODELS_STR="${MODELS_STR:-qwen3.5:0.8b}"
+    fi
 
     # Save to config file securely
     (
@@ -51,15 +82,17 @@ SSH_KEY_PATH="${SSH_KEY_PATH}"
 LOCAL_PORT="${LOCAL_PORT}"
 REMOTE_PORT_OLLAMA="${REMOTE_PORT_OLLAMA}"
 MODELS_STR="${MODELS_STR}"
+DEFAULT_DIR="${DEFAULT_DIR}"
 EOF
     )
     echo -e "${GREEN}[SUCCESS]${NC} Configuration saved to ${CONFIG_FILE}"
 }
 
 ensure_config() {
+    local setup_mode="$1"
     if [ ! -f "${CONFIG_FILE}" ]; then
         echo -e "${YELLOW}[WARNING]${NC} No configuration found. Let's set it up."
-        cmd_setup
+        cmd_setup "$setup_mode"
     fi
     load_config
     
@@ -96,9 +129,7 @@ check_ssh_connection() {
     return $?
 }
 
-cmd_init() {
-    log_info "Starting environment initialization..."
-
+setup_ssh_connection() {
     # 1. SSH Key Generation
     if [ ! -f "${SSH_KEY_PATH}" ]; then
         log_info "SSH key not found at ${SSH_KEY_PATH}. Generating one..."
@@ -153,6 +184,7 @@ Host ${REMOTE_HOST}
     Port ${REMOTE_PORT}
     IdentityFile ${SSH_KEY_PATH}
     IdentitiesOnly yes
+    StrictHostKeyChecking accept-new
 EOF
     log_success "SSH config updated for '${REMOTE_HOST}'."
 
@@ -196,6 +228,13 @@ EOF
         log_error "SSH key authentication verification failed. Please check your config."
         exit 1
     fi
+
+}
+
+cmd_init() {
+    log_info "Starting environment initialization..."
+
+    setup_ssh_connection
 
     # 5. Install Ollama on Remote Server
     log_info "Checking if Ollama is installed on the remote server..."
@@ -584,21 +623,144 @@ cmd_chat() {
     ssh -t "${REMOTE_HOST}" "ollama run ${selected_model}"
 }
 
+cmd_ssh_connect() {
+    if [ -z "$1" ]; then
+        log_info "No profile specified. Setting up a new server connection..."
+        cmd_setup "ssh-only"
+    elif [ ! -f "${CONFIG_FILE}" ]; then
+        log_info "Profile '${1}' not found. Setting up a new server connection..."
+        cmd_setup "ssh-only"
+    fi
+    log_info "Starting SSH connection setup for profile: ${PROFILE}..."
+    setup_ssh_connection
+    log_success "Connecting to ${REMOTE_HOST} via SSH. Type 'exit' or press Ctrl+D to disconnect."
+    if [ -n "${DEFAULT_DIR}" ] && [ "${DEFAULT_DIR}" != "~" ]; then
+        ssh -t "${REMOTE_HOST}" "cd ${DEFAULT_DIR} && exec \$SHELL -l"
+    else
+        ssh "${REMOTE_HOST}"
+    fi
+}
+
+cmd_ssh_disconnect() {
+    log_info "Terminating active SSH connections to ${REMOTE_HOST}..."
+    local ssh_pids
+    ssh_pids=$(pgrep -f "ssh.*${REMOTE_HOST}")
+    
+    if [ -n "$ssh_pids" ]; then
+        kill $ssh_pids 2>/dev/null
+        log_success "Closed active SSH connections to ${REMOTE_HOST}."
+    else
+        log_info "No active SSH connections found for ${REMOTE_HOST}."
+    fi
+}
+
+cmd_ssh_delete() {
+    local target_profile="${1:-$PROFILE}"
+    
+    if [ -z "$1" ]; then
+        log_error "Please specify a profile to delete. (e.g., remote-ollama ssh-delete my-server)"
+        exit 1
+    fi
+
+    PROFILE="$target_profile"
+    CONFIG_FILE="${PROFILES_DIR}/${PROFILE}.env"
+    
+    if [ ! -f "${CONFIG_FILE}" ]; then
+        log_error "Profile '${PROFILE}' not found."
+        exit 1
+    fi
+    
+    load_config
+    
+    log_info "Deleting local profile '${PROFILE}'..."
+
+    # 1. Remove SSH configuration block from Mac ~/.ssh/config
+    local ssh_config="${HOME}/.ssh/config"
+    if [ -f "${ssh_config}" ]; then
+        log_info "Removing SSH Host configuration from Mac config..."
+        if python3 -c "
+import sys
+path, host = sys.argv[1], sys.argv[2]
+try:
+    with open(path, 'r') as f: lines = f.readlines()
+except Exception:
+    lines = []
+new_lines = []
+skip = False
+for line in lines:
+    stripped = line.strip()
+    if stripped.lower().startswith('host '):
+        hosts = [h.strip() for h in stripped.split()[1:]]
+        skip = host in hosts
+    elif line and not line.startswith(' ') and not line.startswith('	') and stripped != '':
+        skip = False
+    if not skip:
+        new_lines.append(line)
+while new_lines and new_lines[-1].strip() == '':
+    new_lines.pop()
+with open(path, 'w') as f: f.writelines(new_lines)
+" "${ssh_config}" "${REMOTE_HOST}"; then
+            log_success "SSH configuration block removed."
+        else
+            log_warning "Failed to remove SSH config block."
+        fi
+    fi
+
+    # 2. Delete local SSH key files
+    if [ -f "${SSH_KEY_PATH}" ] || [ -f "${SSH_KEY_PATH}.pub" ]; then
+        log_info "Deleting local SSH key files..."
+        rm -f "${SSH_KEY_PATH}" "${SSH_KEY_PATH}.pub"
+        log_success "Local SSH key files deleted."
+    fi
+    
+    # 3. Delete the profile config file
+    rm -f "${CONFIG_FILE}"
+    log_success "Profile '${PROFILE}' deleted locally."
+}
+
+cmd_list() {
+    echo -e "${BLUE}[INFO]${NC} Configured Profiles:"
+    if [ ! -d "${PROFILES_DIR}" ] || [ -z "$(ls -A "${PROFILES_DIR}" 2>/dev/null)" ]; then
+        echo "  No profiles found."
+        return
+    fi
+    for file in "${PROFILES_DIR}"/*.env; do
+        if [ -f "$file" ]; then
+            local profile_name=$(basename "$file" .env)
+            if [ "$profile_name" = "$PROFILE" ]; then
+                echo -e "  * ${GREEN}${profile_name}${NC} (active)"
+            else
+                echo -e "    ${profile_name}"
+            fi
+        fi
+    done
+}
+
 cmd_help() {
     echo -e "${BLUE}remote-ollama${NC} - Manage remote GPU-powered Ollama instances"
     echo ""
-    echo -e "Usage: remote-ollama [COMMAND]"
+    echo -e "Usage: remote-ollama [COMMAND] [PROFILE]"
     echo ""
-    echo "Commands:"
+    echo "Configuration & Setup:"
+    echo "  ssh-list    List all configured server profiles"
+    echo "  ssh-delete  Delete a local server profile (e.g., ssh-delete my-server)"
     echo "  setup       Configure server connection settings"
     echo "  init        Initialize SSH keys and install Ollama on remote server"
-    echo "  connect     Start remote Ollama and open local SSH tunnel"
-    echo "  chat        Start an interactive chat session with a remote model"
-    echo "  status      Show status of local tunnel, remote Ollama, and GPU usage"
-    echo "  test        Send a test prompt to remote Ollama (e.g., test 'hi')"
-    echo "  pull        Download a model onto the remote server (e.g., pull qwen3.5:0.8b)"
-    echo "  disconnect  Stop local tunnel and remote Ollama service"
     echo "  reset       Full teardown: stop services, revoke SSH keys, and delete config"
+    echo ""
+    echo "Connection & Services:"
+    echo "  ssh-connect Start setup and open an interactive SSH shell to the server"
+    echo "  ssh-disconnect End current active SSH connections to the server"
+    echo "  connect     Start remote Ollama and open local SSH tunnel"
+    echo "  disconnect  Stop local tunnel and remote Ollama service"
+    echo "  status      Show status of local tunnel, remote Ollama, and GPU usage"
+    echo ""
+    echo "Models & Interaction:"
+    echo "  pull        Download a model onto the remote server (e.g., pull qwen3.5:0.8b)"
+    echo "  chat        Start an interactive chat session with a remote model"
+    echo "  test        Send a test prompt to remote Ollama (e.g., test 'hi')"
+    echo ""
+    echo "Other:"
     echo "  help        Display this help message"
     echo ""
 }
@@ -615,6 +777,12 @@ case "$1" in
         ensure_config
         cmd_pull "$@"
         ;;
+    ssh-list|list)
+        cmd_list
+        ;;
+    ssh-delete)
+        cmd_ssh_delete "$2"
+        ;;
     help|--help|-h)
         cmd_help
         ;;
@@ -625,6 +793,14 @@ case "$1" in
     init)
         ensure_config
         cmd_init
+        ;;
+    ssh-connect)
+        ensure_config "ssh-only"
+        cmd_ssh_connect "$2"
+        ;;
+    ssh-disconnect)
+        ensure_config
+        cmd_ssh_disconnect
         ;;
     connect)
         ensure_config

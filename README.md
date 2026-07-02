@@ -63,62 +63,89 @@ brew install remote-ollama
    source ~/.zshrc
    ```
 
+ 
+
 ## 📖 Usage Guide
 
-The tool uses a simple sub-command structure. 
+> **Note on Multiple Servers (Profiles)**
+> All commands optionally accept a profile name as the second argument (e.g. `remote-ollama connect my-server`). If no profile is provided, it defaults to `default` or automatically creates one.
 
 ### 1. ⚙️ Configuration Setup (`setup`)
 Configure your server details. It interactively asks for Host Alias, Server IP Address, SSH Port, Username, SSH Key Path, Local Tunnel Port, and remote Ollama Port:
 ```bash
 remote-ollama setup
 ```
-*Note: This saves your configuration to `~/.remote-ollama.env` with strict `0600` permissions, keeping your IP and usernames safe.*
+*Note: Your configuration is saved based on the Host Alias (e.g. `~/.remote-ollama/profiles/<alias>.env`) with strict `0600` permissions.*
 
-### 2. 🏗️ Initialization (`init`)
+### 2. 📋 List Profiles (`ssh-list`)
+View all of your configured server profiles:
+```bash
+remote-ollama ssh-list
+```
+
+### 3. 🗑️ Delete Profile (`ssh-delete`)
+Delete a local server profile (removes the config file, local SSH key, and local SSH config block):
+```bash
+remote-ollama ssh-delete my-server
+```
+
+### 4. 🏗️ Initialization (`init`)
 Sets up SSH keys, modifies your local `~/.ssh/config` file, copy the public key to the remote server, and installs Ollama on the remote host if not already present:
 ```bash
 remote-ollama init
 ```
 
-### 3. 🔌 Connect Service (`connect`)
+### 5. 🔌 Connect Service (`connect`)
 Starts the remote Ollama service, establishes the local port-forwarding SSH tunnel (`localhost:11434` -> `remote:11434`), and pulls any missing models defined in your config:
 ```bash
 remote-ollama connect
 ```
 *Once connected, point your local clients to `http://localhost:11434`.*
 
-### 4. 💬 Interactive Chat (`chat`)
+### 6. 💻 SSH Connect (`ssh-connect`)
+Start SSH setup and open an interactive SSH shell directly to the server:
+```bash
+remote-ollama ssh-connect
+```
+
+### 7. 🚫 SSH Disconnect (`ssh-disconnect`)
+End current active SSH connections to the server:
+```bash
+remote-ollama ssh-disconnect
+```
+
+### 8. 💬 Interactive Chat (`chat`)
 Start a native, interactive chat session directly in your terminal. It lists all available models on the remote server, lets you select one, and launches the interactive Ollama chat session:
 ```bash
 remote-ollama chat
 ```
 *Note: If only one model is available, the script will select it automatically.*
 
-### 5. 📊 Check Status (`status`)
+### 9. 📊 Check Status (`status`)
 Check the status of the local port-forwarding tunnel, remote Ollama service, installed models, and real-time GPU utilization (`nvidia-smi`):
 ```bash
 remote-ollama status
 ```
 
-### 6. 🧪 Test Connection (`test`)
+### 10. 🧪 Test Connection (`test`)
 Send a quick test query to ensure inference is working properly through the local tunnel:
 ```bash
 remote-ollama test "Explain quantum computing in one sentence."
 ```
 
-### 7. 📦 Pull Model (`pull`)
+### 11. 📦 Pull Model (`pull`)
 Download a new model onto the remote server:
 ```bash
 remote-ollama pull qwen3.5:0.8b
 ```
 
-### 8. 🔌 Disconnect Service (`disconnect`)
+### 12. 🔌 Disconnect Service (`disconnect`)
 Tears down the local SSH tunnel and cleanly kills remote Ollama and runner processes to release GPU VRAM:
 ```bash
 remote-ollama disconnect
 ```
 
-### 9. 💥 Full Reset (`reset`)
+### 13. 💥 Full Reset (`reset`)
 A complete "back to zero" command. Revokes the SSH key from the remote server's `authorized_keys`, removes the host alias configuration from your `~/.ssh/config`, and deletes local SSH keys:
 ```bash
 remote-ollama reset
